@@ -1,7 +1,6 @@
 <template>
   <div class="com-container">
     <div class="com-chart" ref="seller_ref">
-
     </div>
   </div>
 </template>
@@ -12,26 +11,18 @@
     data(){
       return {
         chartInstance:null,
-        allData : null,
+        allData : [],
         currentPage :1,
         totalPage:0,
-        timeId:null
+        timeId:null,
+        sendtime:[],
       }
-    },
-    created() {
-      this.$socket.registerCallBack('sellerData',this.getData)
     },
     mounted() {
       //页面打开时就执行
+      this.creatsendtime()
       this.initChart()
-      // this.getData()
-      //发送数据给服务器，告诉服务器我需要数据
-      this.$socket.send({
-        action:'getData',
-        socketType:'sellerData',
-        chartName:'seller',
-        value:''
-      })
+      this.getData()
       window.addEventListener('resize', this.screenAdapter)
       // 在页面加载完成的时候, 主动进行屏幕的适配
       this.screenAdapter()
@@ -40,16 +31,50 @@
       clearInterval(this.timeId)
       // 在组件销毁的时候, 需要将监听器取消掉
       window.removeEventListener('resize', this.screenAdapter)
-      this.$socket.unRegisterCallBack('sellerData')
     },
     methods:{
+      dateFormat(fmt, date) {
+        let ret;
+        const opt = {
+          "Y+": date.getFullYear().toString(),        // 年
+          "m+": (date.getMonth() + 1).toString(),     // 月
+          "d+": date.getDate().toString(),            // 日
+          "H+": date.getHours().toString(),           // 时
+          "M+": date.getMinutes().toString(),         // 分
+          "S+": date.getSeconds().toString()          // 秒
+          // 有其他格式化字符需求可以继续添加，必须转化成字符串
+        };
+        for (let k in opt) {
+          ret = new RegExp("(" + k + ")").exec(fmt);
+          if (ret) {
+            fmt = fmt.replace(ret[1], (ret[1].length == 1) ? (opt[k]) : (opt[k].padStart(ret[1].length, "0")))
+          };
+        };
+        return fmt;
+      },
+
+      creatsendtime(){
+        var date =new Date();
+        date = this.dateFormat("YYYY-mm-dd%20", date);
+        for (var i=0;i<25;i++)
+        {
+          if(i<10)
+          {
+            this.sendtime[i]=date+"0"+i+"%3A00%3A00";
+          }
+          else{
+            this.sendtime[i]=date+i+"%3A00%3A00";
+          }
+        }
+        console.log(this.sendtime)
+      },
       //1.初始化echartInstance对象
       initChart(){
         this.chartInstance=this.$echarts.init(this.$refs.seller_ref,'chalk')
         //对图标初始化配置的控制
         const initOption={
           title:{
-            text:'#车流量统计',
+            text:'#一段时间内车流量统计',
             left:20,
             top:20,
             grid:{
@@ -122,31 +147,42 @@
           this.startInterval()
         })
       },
-      getData(ret){
-        //{data:ret}对数据进行重构赋值给ret（只要其中一部分数据）
-        // const {data:ret} =await this.$http.get('seller')
-        console.log(ret)
-        this.allData = ret
-        //!!!!!!!!!!!!!!!!!!!!!!!!!!!!为啥  #对数据进行排序
-        this.allData.sort((a,b) =>{
-          return a.value - b.value
-        })
-        // #计算总页数（每5个数据显示一页）
-        this.totalPage = this.allData.length %5 === 0? this.allData.length/5 :this.allData.length/5 +1
-        this.updateChart()
-        //  启动定时器
-        this.startInterval()
+      async getData(){
+        var k = 0
+        for (var i =0;i<this.sendtime.length;i++){
+          if (i == this.sendtime.length-1){
+            console.log('sendtime.length')
+            console.log(this.sendtime.length)
+            this.totalPage = this.sendtime.length %5 === 0? this.sendtime.length/5 :this.sendtime.length/5 +1
+            this.updateChart()
+            //  启动定时器
+            this.startInterval()
+          }else{
+            this.$http.get(`city-car/city/getCarByCityId?id=1&start=${this.sendtime[k]}&end=${this.sendtime[i+1]}`).then(res => {
+              console.log('返回的数据：')
+              console.log(res.data)
+              // this.accountList.date = this.accountList.date.substring(1,7)
+              this.allData.push(res.data)
+              console.log('allData_：')
+              console.log(this.allData)
+            }).catch(function (err) {
+              console.log(err);
+            });
+            k +=1
+          }
+        }
       },
+
       //2。
-      updateChart(){
+      updateChart (){
         const start = (this.currentPage - 1)*5
         const end =(this.currentPage)*5
         const showData =this.allData.slice(start, end)
         const sellerNames = showData.map((item) =>{
-          return item.name
+          return item.data.time
         })
         const sellerValues = showData.map((item) =>{
-          return item.value
+          return item.data.num
         })
         const dataOption ={
           yAxis:{
@@ -165,13 +201,14 @@
         if(this.timeId){
           clearInterval(this.timeId)
         }
-         this.timeId = setInterval (() =>{
+        this.timeId = setInterval (() =>{
           this.currentPage ++
           if(this.currentPage > this.totalPage){
             this.currentPage = 1
           }
           this.updateChart()
         },3000)
+        // setInterval(this.getData(), 1000);
       },
       screenAdapter(){
         //数值是老师实验觉得最合适的

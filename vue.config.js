@@ -5,9 +5,21 @@ function resolve(dir){
 }
 
 module.exports = {
+  // baseUrl: '/',
   devServer:{
-    port:8999,
-    open:true
+    port:8994,
+    open:true,
+    //assetsSubDirectory: 'static',
+    //assetsPublicPath: '/',
+    proxy: {     //axios跨域处理
+      '/api': {       //此处并非和url一致
+        target:'http://120.24.6.16:8004/edu/',
+        changeOrigin:true, //允许跨域
+        pathRewrite:{
+          '^/api': ''
+        }
+      }
+    }
   },
   //配置路径别名
   chainWebpack:(config)=>{
